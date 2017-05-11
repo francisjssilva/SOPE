@@ -34,10 +34,26 @@ void *thrRandom(void* args)
 
 	for(int i = 0; i < ((ArgsToSend *)args)->nr; i++){
 		printf("entra\n");
-		thrd.p = i;
-		thrd.g = 'M';
-		thrd.t = 1000;
-		thrd.reject = 0;
+		
+		if(i == 1){
+			thrd.p = i;
+			thrd.g = 'F';
+			thrd.t = 1000;
+			thrd.reject = 0;
+		}
+		else if(i == 2){
+			thrd.p = i;
+			thrd.g = 'F';
+			thrd.t = 3000;
+			thrd.reject = 0;
+		}
+		else{
+			thrd.p = i;
+			thrd.g = 'M';
+			thrd.t = 2000;
+			thrd.reject = 0;
+		}
+		
 		printf("sizeof(Spedido)%lu\n", sizeof(Spedido));
 		printf("write:%zd\n", write(fd1, &thrd, sizeof(Spedido)));
 	}
@@ -53,6 +69,7 @@ void *thrRandom(void* args)
 		thrd.t = pedido->t;
 		thrd.reject = pedido->reject;
 
+		//sleep(3);
 		if(pedido->reject < 3){
 			printf("\nPedido nr %d rejeitado, vai voltar a ser analisado!\n", pedido->p);
 			write(fd1, &thrd, sizeof(Spedido));

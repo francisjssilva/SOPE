@@ -11,59 +11,67 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "header.h"
+#include <semaphore.h>
 
 #define EXIT_FAILURE 1
 #define EXIT_SUCCESS 0
-#define MAX_SIZE 300
 
 InfoSauna* infosauna;
 int fdwr;
-pthread_mutex_t lock;
+sem_t sem;
+
+void *thrMLock(void* args)
+{	
+	sem_wait(&sem);
+		infosauna->nrPessoasSauna++;
+		while(((Spedido*)args)->t > 0){ //decrementa o tempo
+			usleep(((Spedido*)args)->t*1000);
+			((Spedido*)args)->t=0; 
+			printf("Disfrutar da sauna :D\n");
+		}
+		infosauna->nrPessoasSauna--;
+	sem_post(&sem);
+
+	return NULL;
+}
 
 void *thrSauna(void* args)
 {	
-
-	if(((Spedido*)args)->p == 0){ //primeiro pedido que limita o tipo de sauna.
-		infosauna->genero = 'F';
-		infosauna->nrPessoasSauna = 1;
-		printf("Primeira pessoa a delimitar a sauna: %d\n", infosauna->nrPessoasSauna);
-	}
-	else{
-		if(infosauna->nrPessoasSauna < infosauna->maxPedidos){ //ha vagas na sauna?
-			infosauna->nrPessoasSauna++;
+		//if(infosauna->nrPessoasSauna < infosauna->maxPedidos){ //ha vagas na sauna?
 			printf("Ainda ha vaga para o cliente do genero %c com o id %d!\n",((Spedido*)args)->g, ((Spedido*)args)->p);
-		}
+			pthread_t thread;
+			pthread_create(&thread, NULL, thrMLock, ((Spedido*)args)); 
+			//pthread_join(thread, NULL);
+		/*}
 		else{ //sim, excedeu, nao pode entrar. vai para uma fila de espera.
 			printf("Ainda nao ha vaga para o cliente do genero %c com o id %d!\n",((Spedido*)args)->g, ((Spedido*)args)->p);
-			if(((Spedido*)args)->reject < 3){
-				write(fdwr, ((Spedido*)args), sizeof(Spedido)); //devolve ao gerador
-			}
+			pthread_t thread;
+			pthread_create(&thread, NULL, thrMLock, ((Spedido*)args)); 
+			//pthread_join(thread, NULL);
+		}*/
 
-		}
-	}
-
-//free(actPedido);
-return NULL;
+	return NULL;
 }
 
 void *thrFunc(void* args)
 {		
-	if(((Spedido*)args)->p == 0){ //primeiro pedido que limita o tipo de sauna.
+	if(infosauna->nrPessoasSauna == 0){ //primeiro pedido que limita o tipo de sauna.
+		printf("Nr da Pessoa a limitar o genero da sauna: %d\n", ((Spedido*)args)->p);
 		infosauna->genero = ((Spedido*)args)->g;
 		pthread_t thread;
-		pthread_create(&thread, NULL, thrSauna, ((Spedido*)args)); 
-		pthread_join(thread, NULL);
+		pthread_create(&thread, NULL, thrMLock, ((Spedido*)args)); 
+		//pthread_join(thread, NULL);
 	}
 	else{
 		if(((Spedido*)args)->g == infosauna->genero){ //pode entrar na sauna
 			printf("O pedido e do mesmo genero\n");
 			pthread_t thread;
 			pthread_create(&thread, NULL, thrSauna, ((Spedido*)args)); 
-			pthread_join(thread, NULL);
+			//pthread_join(thread, NULL);
 		}
-		else{ //não é do mesmo genero, nao pode entrar, vai para uma fila de espera
+		else{ //não é do mesmo genero, nao pode entrar, vai para uma fila de espera e o reject é decrementado
 			printf("O pedido nao e do mesmo genero\n");
-			printf("rejeitado=%d\n", ((Spedido*)args)->reject);
+			//printf("rejeitado=%d\n", ((Spedido*)args)->reject);
 			if(((Spedido*)args)->reject < 3){	
 				write(fdwr, ((Spedido*)args), sizeof(Spedido)); //devolve ao gerador
 			}
@@ -91,6 +99,8 @@ int main(int argc, char * argv[])
 	Spedido *pedido = malloc(sizeof(Spedido));
 	pthread_t thread;
 
+	sem_init(&sem, 0, infosauna->maxPedidos);
+
 	while(read(fd, pedido, sizeof(Spedido)) > 0){
 		printf("\n\nPedido nr %d esta a ser analisado com os dados:\n", pedido->p);
 		printf(" - Genre: %c\n", pedido->g);
@@ -100,6 +110,8 @@ int main(int argc, char * argv[])
 		pthread_join(thread, NULL);
 	}
 
+
+	sem_destroy(&sem);
 	free(pedido);
 	free(infosauna);
 	close(fdwr);
