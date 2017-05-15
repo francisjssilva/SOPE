@@ -39,6 +39,8 @@ void *rejThr(void* args)
 
 		float inst;
 
+		usleep(500);
+
 		if(pedido->reject < 3){
 			printf("\nPedido nr %d rejeitado, vai voltar a ser analisado!\n", pedido->p);
 			

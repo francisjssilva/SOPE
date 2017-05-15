@@ -22,7 +22,7 @@
 InfoSauna* infosauna;
 int fdwr;
 sem_t sem;
-pthread_mutex_t lock;
+pthread_mutex_t mutex;
 struct timespec time_init, time_end;
 FILE* balfile;
 char pidchar[MAX_SIZE];
@@ -33,11 +33,11 @@ void *thrMLock(void* args)
 {	
 	sem_wait(&sem);
 		infosauna->nrPessoasSauna++;
-		//while(((Spedido*)args)->t > 0){ //decrementa o tempo
+		while(((Spedido*)args)->t > 0){ //decrementa o tempo
 			usleep(((Spedido*)args)->t*1000);
-			//((Spedido*)args)->t=0; 
+			((Spedido*)args)->t=0; 
 			printf("Disfrutar da sauna :D\n");
-		//}
+		}
 		clock_gettime(CLOCK_MONOTONIC, &time_end);
 		float inst = (float)((float)time_end.tv_nsec-time_init.tv_nsec)/100000;
 		sprintf(tidchar, "%ld", (long)pthread_self());
@@ -55,7 +55,7 @@ void *thrMLock(void* args)
 		}
 
 	sem_post(&sem);
-
+pthread_exit(0);
 	return NULL;
 }
 
@@ -69,25 +69,26 @@ void *thrSauna(void* args)
 	fprintf(balfile, "%f - %s - %s - %d: %c - %d - RECEBIDO\n", inst, pidchar, tidchar, ((Spedido*)args)->p, ((Spedido*)args)->g, ((Spedido*)args)->t);
 	printf("Ainda ha vaga para o cliente do genero %c com o id %d!\n",((Spedido*)args)->g, ((Spedido*)args)->p);
 	pthread_t thread;
-	pthread_create(&thread, NULL, thrMLock, ((Spedido*)args)); 
+	pthread_create(&thread, NULL, thrMLock, (void*)((Spedido*)args)); 
 
+pthread_exit(0);
 	return NULL;
 }
 
 void *thrFunc(void* args)
 {		
-	//pthread_mutex_lock(&lock);
+	pthread_mutex_lock(&mutex);
 	if(infosauna->nrPessoasSauna == 0){ //primeiro pedido que limita o tipo de sauna.
 		printf("Nr da Pessoa a limitar o genero da sauna: %d\n", ((Spedido*)args)->p);
 		infosauna->genero = ((Spedido*)args)->g;
 		pthread_t thread;
-		pthread_create(&thread, NULL, thrMLock, ((Spedido*)args)); 
+		pthread_create(&thread, NULL, thrMLock, (void*)((Spedido*)args)); 
 	}
 	else{
 		if(((Spedido*)args)->g == infosauna->genero){ //pode entrar na sauna
 			printf("O pedido e do mesmo genero\n");
 			pthread_t thread;
-			pthread_create(&thread, NULL, thrSauna, ((Spedido*)args)); 
+			pthread_create(&thread, NULL, thrSauna, (void*)((Spedido*)args)); 
 		}
 		else{ //não é do mesmo genero, nao pode entrar, vai para uma fila de espera e o reject é decrementado
 			printf("O pedido nao e do mesmo genero\n");
@@ -108,14 +109,19 @@ void *thrFunc(void* args)
 			}
 		}
 	}
-	//pthread_mutex_unlock(&lock);
+	pthread_mutex_unlock(&mutex);
 
-
+pthread_exit(0);
 return NULL;
 }
 
 int main(int argc, char * argv[])
 {
+   pthread_mutexattr_t shared;
+    pthread_mutexattr_init(&shared);
+    pthread_mutexattr_setpshared(&shared, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&mutex, &shared);
 
     clock_gettime(CLOCK_MONOTONIC, &time_init);
 
@@ -145,6 +151,7 @@ int main(int argc, char * argv[])
 	Spedido *pedido = malloc(sizeof(Spedido));
 	pthread_t thread;
 
+
 	sem_init(&sem, 0, infosauna->maxPedidos);
 
 	while(read(fd, pedido, sizeof(Spedido)) > 0){
@@ -155,8 +162,8 @@ int main(int argc, char * argv[])
 		printf(" - Genre: %c\n", pedido->g);
 		printf(" - Time: %d\n", pedido->t);
 		printf(" - Rej: %d\n", pedido->reject);
-		pthread_create(&thread, NULL, thrFunc, pedido);
-		//pthread_join(thread, NULL);
+		pthread_create(&thread, NULL, thrFunc, (void*)pedido);
+		pthread_join(thread, NULL);
 	}
 
 	sem_destroy(&sem);
